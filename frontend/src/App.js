@@ -1,11 +1,14 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import Layout from './components/Layout';
 import Login from './pages/Login';
 import Register from './pages/Register';
-import Dashboard from './pages/Dashboard';
 import Upload from './pages/Upload';
-import Analysis from './pages/Analysis';
-import Train from './pages/Train';
+import Analytics from './pages/Analytics';
+import ModelTraining from './pages/ModelTraining';
+import MyDatasets from './pages/MyDatasets';
+import DatasetDetail from './pages/DatasetDetail';
+import Dashboard from './pages/Dashboard';
 
 const PrivateRoute = ({ children }) => {
   return localStorage.getItem('access') ? children : <Navigate to="/login" />;
@@ -17,11 +20,15 @@ function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
-        <Route path="/upload" element={<PrivateRoute><Upload /></PrivateRoute>} />
-        <Route path="/analysis/:id" element={<PrivateRoute><Analysis /></PrivateRoute>} />
-        <Route path="/train/:id" element={<PrivateRoute><Train /></PrivateRoute>} />
-        <Route path="*" element={<Navigate to="/login" />} />
+        <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
+          <Route index element={<Navigate to="/dashboard" />} />
+          <Route path="dashboard" element={<Dashboard />} />
+          <Route path="upload" element={<Upload />} />
+          <Route path="analytics" element={<Analytics />} />
+          <Route path="training" element={<ModelTraining />} />
+          <Route path="datasets" element={<MyDatasets />} />
+          <Route path="datasets/:id" element={<DatasetDetail />} />
+        </Route>
       </Routes>
     </BrowserRouter>
   );

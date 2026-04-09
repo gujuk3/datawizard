@@ -95,3 +95,33 @@ def dataset_detail(request, pk):
     except Dataset.DoesNotExist:
         return Response({'error': 'Dataset not found.'}, status=status.HTTP_404_NOT_FOUND)
     return Response(DatasetSerializer(dataset).data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def dataset_preview(request, pk):
+    try:
+        dataset = Dataset.objects.get(pk=pk, user=request.user)
+    except Dataset.DoesNotExist:
+        return Response({'error': 'Dataset not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        df = load_csv(dataset.file.path)
+        rows = df.head(50).where(df.notna(), None).values.tolist()
+        return Response({
+            'columns': list(df.columns),
+            'rows': rows,
+            'total_rows': len(df),
+        })
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_dataset(request, pk):
+    try:
+        dataset = Dataset.objects.get(pk=pk, user=request.user)
+        dataset.delete()
+        return Response({'message': 'Dataset deleted.'}, status=status.HTTP_204_NO_CONTENT)
+    except Dataset.DoesNotExist:
+        return Response({'error': 'Dataset not found.'}, status=status.HTTP_404_NOT_FOUND)

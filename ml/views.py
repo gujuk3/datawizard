@@ -22,6 +22,7 @@ from datawizard_core.exceptions import ValidationError, TrainingError
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def train(request):
+
     dataset_id = request.data.get('dataset_id')
     algorithm = request.data.get('algorithm', 'random_forest_classifier')
     model_type = request.data.get('model_type', 'classification')
@@ -29,6 +30,24 @@ def train(request):
     feature_columns = request.data.get('feature_columns', None)
     test_size = float(request.data.get('test_size', 0.2))
     hyperparameters = request.data.get('hyperparameters', {})
+
+    # Aynı model var mı kontrol et
+    existing = MLModel.objects.filter(
+        user=request.user,
+        dataset_id=dataset_id,
+        algorithm=algorithm,
+        target_column=target_column,
+        train_test_split=test_size,
+        training_status='completed',
+    ).first()
+
+    if existing:
+        return Response({
+            'model': MLModelSerializer(existing).data,
+            'evaluation': {},
+            'already_exists': True,
+        }, status=status.HTTP_200_OK)
+
 
     if not dataset_id or not target_column:
         return Response(
@@ -129,3 +148,47 @@ def model_detail(request, pk):
     except MLModel.DoesNotExist:
         return Response({'error': 'Model not found.'}, status=status.HTTP_404_NOT_FOUND)
     return Response(MLModelSerializer(ml_model).data)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def predict(request, pk):
+    try:
+        ml_model = MLModel.objects.get(pk=pk, user=request.user)
+    except MLModel.DoesNotExist:
+        return Response({'error': 'Model not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    features = request.data.get('features', {})
+    if not features:
+        return Response({'error': 'No features provided.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        dataset = ml_model.dataset
+        df = load_csv(dataset.file.path)
+        split = split_data(df, ml_model.target_column, ml_model.feature_columns)
+        retrain = train_model(
+            split['X_train'], split['y_train'],
+            ml_model.algorithm, ml_model.model_type
+        )
+        model = retrain['model']
+
+        import pandas as pd
+        input_df = pd.DataFrame([features])
+        input_df = input_df[ml_model.feature_columns]
+        prediction = model.predict(input_df)[0]
+
+        if hasattr(prediction, 'item'):
+            prediction = prediction.item()
+
+        return Response({'prediction': prediction})
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_model(request, pk):
+    try:
+        ml_model = MLModel.objects.get(pk=pk, user=request.user)
+        ml_model.delete()
+        return Response({'message': 'Model deleted.'}, status=status.HTTP_204_NO_CONTENT)
+    except MLModel.DoesNotExist:
+        return Response({'error': 'Model not found.'}, status=status.HTTP_404_NOT_FOUND)
