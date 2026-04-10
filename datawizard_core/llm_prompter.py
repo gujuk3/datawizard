@@ -21,6 +21,9 @@ ENV_KEYS = {
     "anthropic": "ANTHROPIC_API_KEY",
 }
 
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_MODEL = "llama-3.3-70b-versatile"
+
 DEFAULT_TEMPERATURE = 0.3
 DEFAULT_MAX_TOKENS = 1000
 REQUEST_TIMEOUT = 30
@@ -455,3 +458,35 @@ def parse_llm_response(response_text: str) -> dict:
         "bullet_points": bullet_points,
         "raw_text": raw_text,
     }
+
+def call_groq(prompt: str) -> str:
+    api_key = os.environ.get("GROQ_API_KEY")
+    if not api_key:
+        raise LLMError(
+            message="GROQ_API_KEY not set.",
+            details={"env_key": "GROQ_API_KEY"},
+        )
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+
+    payload = {
+        "model": GROQ_MODEL,
+        "messages": [
+            {"role": "system", "content": SYSTEM_MESSAGE},
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": DEFAULT_TEMPERATURE,
+        "max_tokens": DEFAULT_MAX_TOKENS,
+    }
+
+    response = requests.post(
+        GROQ_API_URL,
+        headers=headers,
+        json=payload,
+        timeout=REQUEST_TIMEOUT,
+    )
+    response.raise_for_status()
+    return response.json()["choices"][0]["message"]["content"]

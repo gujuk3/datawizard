@@ -13,6 +13,40 @@ from datawizard_core.data_analyzer import (
 )
 from datawizard_core.data_preprocessor import handle_missing_values
 from datawizard_core.exceptions import ValidationError, PreprocessingError
+from datawizard_core.llm_prompter import build_statistics_prompt, call_groq
+from datawizard_core.exceptions import LLMError
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def llm_explain(request, pk):
+    dataset = _get_dataset_or_404(pk, request.user)
+    if not dataset:
+        return Response({'error': 'Dataset not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    explain_type = request.data.get('type', 'statistics')
+
+    try:
+        df = _load_df(dataset)
+        stats = compute_basic_statistics(df)
+        missing = detect_missing_data(df)
+
+        summary_data = {
+            'row_count': df.shape[0],
+            'column_count': df.shape[1],
+            'numeric_column_count': len(stats['numeric']),
+            'categorical_column_count': len(stats['categorical']),
+            'missing_pct': missing['total_missing_pct'],
+            'duplicate_row_count': int(df.duplicated().sum()),
+        }
+
+        prompt = build_statistics_prompt(summary_data, stats)
+        explanation = call_groq(prompt)
+
+        return Response({'explanation': explanation})
+    except LLMError as e:
+        return Response({'error': e.message}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 def _get_dataset_or_404(pk, user):
