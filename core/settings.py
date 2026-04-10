@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     'datasets',
     'analytics',
     'ml',
+    'django_extensions',
 ]
 
 MIDDLEWARE = [
