@@ -23,6 +23,7 @@ export default function Analytics() {
       else if (type === 'missing') res = await API.get(`/analytics/${selectedId}/missing/`);
       else if (type === 'correlation') res = await API.get(`/analytics/${selectedId}/correlation/`);
       else if (type === 'preprocess') res = await API.post(`/analytics/${selectedId}/preprocess/`, preprocessForm);
+      else if (type === 'explain') res = await API.post(`/analytics/${selectedId}/explain/`, { type: 'statistics' });
       setResult({ type, data: res.data });
     } catch (e) {
       setResult({ type: 'error', data: e.response?.data?.error || 'Hata oluştu.' });
@@ -54,6 +55,7 @@ export default function Analytics() {
           { key: 'missing', label: '🔍 Eksik Veri' },
           { key: 'correlation', label: '🔗 Korelasyon' },
           { key: 'preprocess', label: '⚙️ Ön İşleme' },
+          { key: 'explain', label: '🤖 AI Açıklama' },
         ].map(btn => (
           <button
             key={btn.key}
@@ -93,6 +95,7 @@ export default function Analytics() {
           {result.type === 'missing' && <MissingResult data={result.data} />}
           {result.type === 'correlation' && <CorrelationResult data={result.data} />}
           {result.type === 'preprocess' && <PreprocessResult data={result.data} />}
+          {result.type === 'explain' && <ExplainResult data={result.data} />}
         </div>
       )}
     </div>
@@ -198,6 +201,26 @@ function PreprocessResult({ data }) {
       {r.columns_affected?.length > 0 && (
         <p>Etkilenen sütunlar: <strong>{r.columns_affected.join(', ')}</strong></p>
       )}
+    </div>
+  );
+}
+
+function ExplainResult({ data }) {
+  return (
+    <div>
+      <h3>🤖 AI Açıklama</h3>
+      <div style={{
+        background: '#f8f6ff',
+        border: '1px solid #a29bfe',
+        borderRadius: '8px',
+        padding: '20px',
+        lineHeight: '1.8',
+        whiteSpace: 'pre-wrap',
+        fontSize: '14px',
+        color: '#2d3436',
+      }}>
+        {data.explanation}
+      </div>
     </div>
   );
 }
