@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import API from '../api';
+import MarkdownText from '../components/MarkdownText';
 
 export default function Analytics() {
   const [datasets, setDatasets] = useState([]);
@@ -214,12 +215,8 @@ function ExplainResult({ data }) {
         border: '1px solid #a29bfe',
         borderRadius: '8px',
         padding: '20px',
-        lineHeight: '1.8',
-        whiteSpace: 'pre-wrap',
-        fontSize: '14px',
-        color: '#2d3436',
       }}>
-        {data.explanation}
+        <MarkdownText>{data.explanation}</MarkdownText>
       </div>
     </div>
   );

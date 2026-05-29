@@ -214,3 +214,4 @@ def get_data_preview(df: pd.DataFrame, n_rows: int = 5) -> dict:
         "total_rows": len(df),
         "total_columns": len(df.columns),
     }
+

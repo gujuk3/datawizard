@@ -123,5 +123,22 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 STATICFILES_DIRS = [BASE_DIR / 'frontend' / 'build' / 'static']
 
+# Email (Gmail SMTP)
+EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
+DEFAULT_FROM_EMAIL = config('EMAIL_HOST_USER', default='noreply@datawizard.com')
+FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:3000')
+
 GROQ_API_KEY = config('GROQ_API_KEY', default='')
 os.environ['GROQ_API_KEY'] = GROQ_API_KEY
+
+LLM_PROVIDER = config('LLM_PROVIDER', default='groq')
+LOCAL_LLM_BASE_URL = config('LOCAL_LLM_BASE_URL', default='http://127.0.0.1:8080/v1')
+LOCAL_LLM_MODEL = config('LOCAL_LLM_MODEL', default='datawizard-qwen3')
+os.environ['LLM_PROVIDER'] = LLM_PROVIDER
+os.environ['LOCAL_LLM_BASE_URL'] = LOCAL_LLM_BASE_URL
+os.environ['LOCAL_LLM_MODEL'] = LOCAL_LLM_MODEL

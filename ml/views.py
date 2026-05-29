@@ -15,8 +15,10 @@ from datawizard_core.ml_engine import (
     evaluate_classification_model,
     evaluate_regression_model,
     get_feature_importance,
+    compute_shap_values,
 )
 from datawizard_core.exceptions import ValidationError, TrainingError
+from datawizard_core.llm_prompter import build_model_results_prompt, call_llm
 
 
 @api_view(['POST'])
@@ -24,6 +26,7 @@ from datawizard_core.exceptions import ValidationError, TrainingError
 def train(request):
 
     dataset_id = request.data.get('dataset_id')
+    name = request.data.get('name', '').strip()
     algorithm = request.data.get('algorithm', 'random_forest_classifier')
     model_type = request.data.get('model_type', 'classification')
     target_column = request.data.get('target_column')
@@ -31,23 +34,18 @@ def train(request):
     test_size = float(request.data.get('test_size', 0.2))
     hyperparameters = request.data.get('hyperparameters', {})
 
-    # Aynı model var mı kontrol et
-    existing = MLModel.objects.filter(
-        user=request.user,
-        dataset_id=dataset_id,
-        algorithm=algorithm,
-        target_column=target_column,
-        train_test_split=test_size,
-        training_status='completed',
-    ).first()
+    if not name:
+        return Response(
+            {'error': 'Model ismi zorunludur.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
-    if existing:
-        return Response({
-            'model': MLModelSerializer(existing).data,
-            'evaluation': {},
-            'already_exists': True,
-        }, status=status.HTTP_200_OK)
-
+    # Aynı isimde model var mı kontrol et
+    if MLModel.objects.filter(user=request.user, name=name).exists():
+        return Response(
+            {'error': f'"{name}" isimli bir model zaten mevcut. Farklı bir isim seçin.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
     if not dataset_id or not target_column:
         return Response(
@@ -95,7 +93,7 @@ def train(request):
         ml_model = MLModel.objects.create(
             user=request.user,
             dataset=dataset,
-            name=f"{algorithm}_{dataset.name}",
+            name=name,
             algorithm=algorithm,
             model_type=model_type,
             target_column=target_column,
@@ -103,7 +101,7 @@ def train(request):
             hyperparameters=hyperparameters,
             train_test_split=test_size,
             training_status='completed',
-            training_duration=result.get('training_duration', 0),
+            training_duration=result.get('training_duration_seconds', 0),
         )
 
         # Metrikleri kaydet
@@ -122,9 +120,23 @@ def train(request):
                     additional_data=metric_value,
                 )
 
+        feature_importance = get_feature_importance(result['model'], split['feature_names'])
+        shap_values = compute_shap_values(result['model'], split['X_test'], split['feature_names'], model_type)
+
+        # LLM explanation — non-blocking: training succeeds even if LLM fails
+        llm_explanation = None
+        try:
+            prompt = build_model_results_prompt(evaluation, feature_importance, model_type, algorithm, shap_values)
+            llm_explanation = call_llm(prompt)
+        except Exception:
+            pass
+
         return Response({
             'model': MLModelSerializer(ml_model).data,
             'evaluation': evaluation,
+            'feature_importance': feature_importance,
+            'shap_values': shap_values,
+            'llm_explanation': llm_explanation,
         }, status=status.HTTP_201_CREATED)
 
     except (ValidationError, TrainingError) as e:

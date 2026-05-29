@@ -259,6 +259,62 @@ def get_feature_importance(model, feature_names: list) -> list:
 
     return result
 
+TREE_MODELS = {'RandomForestClassifier', 'RandomForestRegressor', 'DecisionTreeClassifier'}
+LINEAR_MODELS = {'LogisticRegression', 'LinearRegression'}
+
+
+def compute_shap_values(model, X_test, feature_names: list, model_type: str) -> list:
+    try:
+        import shap
+
+        model_class = type(model).__name__
+
+        if model_class in TREE_MODELS:
+            explainer = shap.TreeExplainer(model)
+            shap_vals = explainer.shap_values(X_test)
+
+        elif model_class in LINEAR_MODELS:
+            explainer = shap.LinearExplainer(model, X_test)
+            shap_vals = explainer.shap_values(X_test)
+
+        else:
+            # KNN fallback — model-agnostic but slow; cap samples for speed
+            n_bg = min(50, len(X_test))
+            n_explain = min(50, len(X_test))
+            background = shap.sample(X_test, n_bg)
+            explainer = shap.KernelExplainer(model.predict, background)
+            shap_vals = explainer.shap_values(X_test[:n_explain], nsamples=100)
+
+        # Normalise to (n_samples, n_features) with absolute values
+        if isinstance(shap_vals, list):
+            # Binary/multiclass classification: list of per-class arrays
+            sv = np.mean([np.abs(s) for s in shap_vals], axis=0)
+        else:
+            sv = np.abs(shap_vals)
+
+        if sv.ndim == 3:
+            # (n_samples, n_features, n_classes) → average over classes
+            sv = sv.mean(axis=2)
+
+        mean_abs = sv.mean(axis=0)  # (n_features,)
+        total = mean_abs.sum()
+
+        result = []
+        for name, val in zip(feature_names, mean_abs):
+            pct = round(float(val / total * 100), 1) if total > 0 else 0.0
+            result.append({
+                "feature": name,
+                "shap_value": round(float(val), 6),
+                "shap_pct": str(pct),
+            })
+
+        result.sort(key=lambda x: x["shap_value"], reverse=True)
+        return result
+
+    except Exception:
+        return []
+
+
 def run_training_pipeline(df: pd.DataFrame, config: dict) -> dict:
     # Extract config
     target_column = config.get("target_column")

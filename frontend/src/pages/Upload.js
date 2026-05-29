@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import API from '../api';
+import MarkdownText from '../components/MarkdownText';
 
 export default function Upload() {
   const [file, setFile] = useState(null);
@@ -52,6 +53,13 @@ export default function Upload() {
               <span style={styles.meta}>Eksik: {col.missing_count} · Benzersiz: {col.unique_count}</span>
             </div>
           ))}
+          {result.initial_insights && (
+            <div style={styles.insightBox}>
+              <h4 style={styles.insightTitle}>🤖 Bu veri setiyle neler yapabilirsiniz?</h4>
+              <MarkdownText>{result.initial_insights}</MarkdownText>
+            </div>
+          )}
+
           <div style={styles.actionRow}>
             <button style={styles.button2} onClick={() => navigate('/datasets')}>
               🗄️ Veri Setlerim
@@ -79,4 +87,6 @@ const styles = {
   actionRow: { display: 'flex', gap: '12px', marginTop: '16px' },
   button2: { padding: '10px 20px', background: '#6c5ce7', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' },
   button3: { padding: '10px 20px', background: '#00b894', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' },
+  insightBox: { background: '#f8f6ff', border: '1px solid #a29bfe', borderRadius: '8px', padding: '16px 20px', margin: '16px 0' },
+  insightTitle: { margin: '0 0 10px', color: '#6c5ce7', fontSize: '15px' },
 };

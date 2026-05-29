@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import API from '../api';
+import MarkdownText from '../components/MarkdownText';
 
 const ALGORITHMS = [
   { value: 'random_forest_classifier', label: 'Random Forest Classifier', type: 'classification' },
@@ -25,6 +26,8 @@ export default function ModelTraining() {
   const [predLoading, setPredLoading] = useState(false);
   const [trainedModels, setTrainedModels] = useState([]);
   const [selectedModel, setSelectedModel] = useState(null);
+  const [selectedFeatureCols, setSelectedFeatureCols] = useState([]);
+  const [modelName, setModelName] = useState('');
 
   useEffect(() => {
   API.get('/datasets/').then(r => setDatasets(r.data));
@@ -54,26 +57,46 @@ export default function ModelTraining() {
   const featureCols = numericCols.filter(c => c.name !== target).map(c => c.name);
   const selectedAlgo = ALGORITHMS.find(a => a.value === algorithm);
 
+  // Reset selected feature columns whenever the available pool changes
+  useEffect(() => {
+    setSelectedFeatureCols(featureCols);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target, dataset]);
+
+  const toggleFeatureCol = useCallback((col) => {
+    setSelectedFeatureCols(prev =>
+      prev.includes(col) ? prev.filter(c => c !== col) : [...prev, col]
+    );
+  }, []);
+
+  const isDuplicateName = modelName.trim() && trainedModels.some(
+    m => m.name.toLowerCase() === modelName.trim().toLowerCase()
+  );
+
   const handleTrain = async () => {
+    if (!modelName.trim()) { setError('Model ismi boş bırakılamaz.'); return; }
+    if (isDuplicateName) { setError(`"${modelName.trim()}" isimli bir model zaten mevcut.`); return; }
+
     setLoading(true);
     setError('');
     setResult(null);
-
     setPredResult(null);
 
     try {
       const res = await API.post('/ml/train/', {
         dataset_id: parseInt(selectedId),
+        name: modelName.trim(),
         algorithm,
         model_type: selectedAlgo.type,
         target_column: target,
-        feature_columns: featureCols,
+        feature_columns: selectedFeatureCols,
         test_size: testSize,
       });
       setResult(res.data);
       setTrainedModels(prev => [res.data.model, ...prev.filter(m => m.id !== res.data.model.id)]);
+      setModelName('');
       const initInputs = {};
-      featureCols.forEach(f => initInputs[f] = '');
+      selectedFeatureCols.forEach(f => initInputs[f] = '');
       setPredInputs(initInputs);
     } catch (e) {
       setError(e.response?.data?.error || 'Eğitim başarısız.');
@@ -86,7 +109,10 @@ export default function ModelTraining() {
     setPredResult(null);
     try {
       const features = {};
-      featureCols.forEach(f => features[f] = parseFloat(predInputs[f]) || 0);
+      // Use the model's own feature_columns — not the current training config
+      (selectedModel?.feature_columns || []).forEach(f => {
+        features[f] = parseFloat(predInputs[f]) || 0;
+      });
       const res = await API.post(`/ml/${selectedModel.id}/predict/`, { features });
       setPredResult(res.data);
     } catch (e) {
@@ -114,6 +140,26 @@ export default function ModelTraining() {
       {dataset && (
         <div style={styles.card}>
           <h3 style={styles.cardTitle}>Model Ayarları</h3>
+          <div style={{ marginBottom: '16px' }}>
+            <label style={styles.label}>Model İsmi</label>
+            <input
+              type="text"
+              style={{
+                ...styles.select,
+                marginBottom: 0,
+                borderColor: isDuplicateName ? '#e17055' : '#ddd',
+              }}
+              placeholder="örn. İlk Denemem, Iris Sınıflandırıcı..."
+              value={modelName}
+              onChange={e => { setModelName(e.target.value); setError(''); }}
+            />
+            {isDuplicateName && (
+              <span style={{ fontSize: '12px', color: '#e17055' }}>
+                Bu isim zaten kullanılıyor
+              </span>
+            )}
+          </div>
+
           <div style={styles.grid2}>
             <div>
               <label style={styles.label}>Algoritma</label>
@@ -145,12 +191,35 @@ export default function ModelTraining() {
 
           <div style={styles.featureBox}>
             <span style={styles.featureLabel}>Özellik Sütunları:</span>
-            {featureCols.map(f => <span key={f} style={styles.featureTag}>{f}</span>)}
+            <span style={styles.featureHint}>Eğitime dahil etmek istemediklerini kaldır</span>
+            {featureCols.map(f => {
+              const isSelected = selectedFeatureCols.includes(f);
+              return (
+                <span
+                  key={f}
+                  onClick={() => toggleFeatureCol(f)}
+                  style={isSelected ? styles.featureTagSelected : styles.featureTagDeselected}
+                  title={isSelected ? 'Kaldırmak için tıkla' : 'Eklemek için tıkla'}
+                >
+                  {isSelected ? '✓ ' : '✕ '}{f}
+                </span>
+              );
+            })}
+            {selectedFeatureCols.length === 0 && (
+              <span style={styles.featureWarning}>En az bir sütun seçilmeli</span>
+            )}
           </div>
 
           {error && <p style={styles.error}>{error}</p>}
 
-          <button style={styles.trainBtn} onClick={handleTrain} disabled={loading || !target}>
+          <button
+            style={{
+              ...styles.trainBtn,
+              ...(loading || !target || selectedFeatureCols.length === 0 ? styles.trainBtnDisabled : {})
+            }}
+            onClick={handleTrain}
+            disabled={loading || !target || selectedFeatureCols.length === 0 || !modelName.trim() || isDuplicateName}
+          >
             {loading ? '⏳ Eğitiliyor...' : '🚀 Eğitimi Başlat'}
           </button>
         </div>
@@ -179,40 +248,50 @@ export default function ModelTraining() {
             ))}
           </div>
 
-          {/* Tahmin Bölümü */}
-          <div style={styles.predSection}>
-            <h4>🔮 Yeni Veri Tahmini</h4>
-            <p style={styles.predDesc}>Aşağıdaki özelliklerin değerlerini girerek tahmin yapın:</p>
-            <div style={styles.predGrid}>
-              {featureCols.map(f => (
-                <div key={f}>
-                  <label style={styles.predLabel}>{f}</label>
-                  <input
-                    type="number"
-                    style={styles.predInput}
-                    placeholder="Değer girin"
-                    value={predInputs[f] || ''}
-                    onChange={e => setPredInputs({ ...predInputs, [f]: e.target.value })}
-                  />
+          {/* Özellik Önemi */}
+          {result.feature_importance && result.feature_importance.length > 0 && (
+            <div style={styles.fiSection}>
+              <h4 style={styles.fiTitle}>📊 Özellik Önemi</h4>
+              {result.feature_importance.map(f => (
+                <div key={f.feature} style={styles.fiRow}>
+                  <span style={styles.fiName}>{f.feature}</span>
+                  <div style={styles.fiBarWrap}>
+                    <div style={{ ...styles.fiBar, width: `${f.importance_pct}%` }} />
+                  </div>
+                  <span style={styles.fiPct}>%{f.importance_pct}</span>
                 </div>
               ))}
             </div>
-            <button style={styles.predBtn} onClick={handlePredict} disabled={predLoading}>
-              {predLoading ? '⏳ Tahmin ediliyor...' : '🔮 Tahmin Et'}
-            </button>
+          )}
 
-            {predResult && (
-              <div style={styles.predResult}>
-                {predResult.error
-                  ? <p style={{ color: 'red' }}>{predResult.error}</p>
-                  : <div>
-                      <strong>Tahmin Sonucu: </strong>
-                      <span style={styles.predValue}>{predResult.prediction}</span>
-                    </div>
-                }
-              </div>
-            )}
-          </div>
+          {/* SHAP Değerleri */}
+          {result.shap_values && result.shap_values.length > 0 && (
+            <div style={styles.fiSection}>
+              <h4 style={styles.shapTitle}>🔍 SHAP Özellik Etkisi</h4>
+              <p style={styles.shapDesc}>Her özelliğin tahmine ortalama katkısı (açıklanabilir AI)</p>
+              {result.shap_values.map(s => (
+                <div key={s.feature} style={styles.fiRow}>
+                  <span style={styles.fiName}>{s.feature}</span>
+                  <div style={styles.fiBarWrap}>
+                    <div style={{ ...styles.shapBar, width: `${s.shap_pct}%` }} />
+                  </div>
+                  <span style={styles.fiPct}>%{s.shap_pct}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* AI Açıklama */}
+          {result.llm_explanation && (
+            <div style={styles.explainBox}>
+              <h4 style={styles.explainTitle}>🤖 AI Değerlendirmesi</h4>
+              <MarkdownText>{result.llm_explanation}</MarkdownText>
+            </div>
+          )}
+
+          <p style={{ color: '#636e72', fontSize: '13px', marginTop: '8px' }}>
+            Tahmin yapmak için aşağıdaki Eğitilmiş Modeller bölümünden bu modeli seçin.
+          </p>
         </div>
       )}
       {/* Eğitilmiş Modeller */}
@@ -239,9 +318,10 @@ export default function ModelTraining() {
                   }}
                 >
                   <div style={styles.modelCardHeader}>
-                    <strong style={{ fontSize: '12px', wordBreak: 'break-all' }}>{m.algorithm}</strong>
+                    <strong style={{ fontSize: '13px', wordBreak: 'break-all' }}>{m.name}</strong>
                     <span style={{ ...styles.modelTypeBadge, flexShrink: 0, marginLeft: '6px' }}>{m.model_type}</span>
                   </div>
+                  <div style={{ fontSize: '11px', color: '#b2bec3', marginTop: '2px' }}>{m.algorithm}</div>
                   <div style={{ fontSize: '12px', color: '#636e72', marginTop: '6px' }}>
                     Hedef: <strong>{m.target_column}</strong> · Test: %{Math.round(m.train_test_split * 100)}
                   </div>
@@ -267,7 +347,7 @@ export default function ModelTraining() {
             </div>
             {selectedModel && (
               <div style={styles.predSection}>
-                <h4>🔮 {selectedModel.algorithm} — Yeni Veri Tahmini</h4>
+                <h4>🔮 {selectedModel.name} — Yeni Veri Tahmini</h4>
                 <p style={styles.predDesc}>Hedef: <strong>{selectedModel.target_column}</strong></p>
                 <div style={styles.predGrid}>
                   {selectedModel.feature_columns.map(f => (
@@ -315,7 +395,11 @@ const styles = {
   grid2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' },
   featureBox: { display: 'flex', flexWrap: 'wrap', gap: '8px', padding: '12px', background: '#f8f9fa', borderRadius: '8px', marginBottom: '16px', alignItems: 'center' },
   featureLabel: { fontSize: '13px', color: '#636e72', fontWeight: '600' },
-  featureTag: { background: '#6c5ce7', color: 'white', padding: '4px 10px', borderRadius: '4px', fontSize: '12px' },
+  featureHint: { fontSize: '11px', color: '#b2bec3', fontStyle: 'italic', width: '100%', marginBottom: '4px' },
+  featureTagSelected: { background: '#6c5ce7', color: 'white', padding: '4px 10px', borderRadius: '4px', fontSize: '12px', cursor: 'pointer', userSelect: 'none', transition: 'all 0.15s' },
+  featureTagDeselected: { background: '#dfe6e9', color: '#636e72', padding: '4px 10px', borderRadius: '4px', fontSize: '12px', cursor: 'pointer', userSelect: 'none', transition: 'all 0.15s', textDecoration: 'line-through' },
+  featureWarning: { fontSize: '12px', color: '#e17055', fontWeight: '600' },
+  trainBtnDisabled: { background: '#b2bec3', cursor: 'not-allowed' },
   error: { color: 'red', fontSize: '14px', marginBottom: '12px' },
   trainBtn: { width: '100%', padding: '14px', background: '#6c5ce7', color: 'white', border: 'none', borderRadius: '8px', fontSize: '16px', cursor: 'pointer', fontWeight: '600' },
   metaRow: { display: 'flex', gap: '24px', marginBottom: '20px', fontSize: '14px', color: '#636e72' },
@@ -337,4 +421,16 @@ const styles = {
   modelCardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
   modelTypeBadge: { background: '#6c5ce7', color: 'white', padding: '2px 8px', borderRadius: '4px', fontSize: '11px' },
   modelDeleteBtn: { marginTop: '8px', width: '100%', padding: '4px', background: 'transparent', border: '1px solid #e17055', color: '#e17055', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' },
+  fiSection: { marginBottom: '20px' },
+  fiTitle: { margin: '0 0 12px', color: '#2d3436' },
+  fiRow: { display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' },
+  fiName: { width: '160px', fontSize: '13px', color: '#2d3436', flexShrink: 0 },
+  fiBarWrap: { flex: 1, background: '#dfe6e9', borderRadius: '4px', height: '10px' },
+  fiBar: { height: '10px', background: '#6c5ce7', borderRadius: '4px', transition: 'width 0.4s' },
+  fiPct: { width: '44px', fontSize: '13px', color: '#636e72', textAlign: 'right', flexShrink: 0 },
+  explainBox: { background: '#f8f6ff', border: '1px solid #a29bfe', borderRadius: '8px', padding: '16px 20px', marginBottom: '20px' },
+  explainTitle: { margin: '0 0 10px', color: '#6c5ce7' },
+  shapTitle: { margin: '0 0 4px', color: '#2d3436' },
+  shapDesc: { fontSize: '12px', color: '#636e72', marginBottom: '12px' },
+  shapBar: { height: '10px', background: '#00b894', borderRadius: '4px', transition: 'width 0.4s' },
 };

@@ -9,6 +9,9 @@ import ModelTraining from './pages/ModelTraining';
 import MyDatasets from './pages/MyDatasets';
 import DatasetDetail from './pages/DatasetDetail';
 import Dashboard from './pages/Dashboard';
+import VerifyEmail from './pages/VerifyEmail';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 
 const PrivateRoute = ({ children }) => {
   return localStorage.getItem('access') ? children : <Navigate to="/login" />;
@@ -20,6 +23,9 @@ function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/verify-email/:token" element={<VerifyEmail />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password/:token" element={<ResetPassword />} />
         <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
           <Route index element={<Navigate to="/dashboard" />} />
           <Route path="dashboard" element={<Dashboard />} />

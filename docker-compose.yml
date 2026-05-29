@@ -1,0 +1,43 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: datawizard
+      POSTGRES_USER: datawizard
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-datawizard}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U datawizard"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://datawizard:${POSTGRES_PASSWORD:-datawizard}@db:5432/datawizard
+    volumes:
+      - media_files:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+
+  ollama:
+    image: ollama/ollama
+    restart: unless-stopped
+    profiles: [local-llm]
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+volumes:
+  postgres_data:
+  media_files:
+  ollama_data:

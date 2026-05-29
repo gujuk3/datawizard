@@ -13,8 +13,13 @@ export default function Login() {
       localStorage.setItem('access', res.data.access);
       localStorage.setItem('refresh', res.data.refresh);
       window.location.href = '/dashboard';
-    } catch {
-      setError('Geçersiz email veya şifre.');
+    } catch (err) {
+      const code = err.response?.data?.code;
+      if (code === 'email_not_verified') {
+        setError('Lütfen önce email adresinizi doğrulayın.');
+      } else {
+        setError('Geçersiz email veya şifre.');
+      }
     }
   };
 
@@ -29,6 +34,7 @@ export default function Login() {
           <input style={styles.input} type="password" placeholder="Şifre" value={password} onChange={e => setPassword(e.target.value)} required />
           <button style={styles.button} type="submit">Giriş Yap</button>
         </form>
+        <p style={styles.link}><a href="/forgot-password">Şifremi unuttum</a></p>
         <p style={styles.link}>Hesabın yok mu? <a href="/register">Kayıt Ol</a></p>
       </div>
     </div>

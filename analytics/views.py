@@ -13,7 +13,7 @@ from datawizard_core.data_analyzer import (
 )
 from datawizard_core.data_preprocessor import handle_missing_values
 from datawizard_core.exceptions import ValidationError, PreprocessingError
-from datawizard_core.llm_prompter import build_statistics_prompt, call_groq
+from datawizard_core.llm_prompter import build_statistics_prompt, call_llm
 from datawizard_core.exceptions import LLMError
 
 @api_view(['POST'])
@@ -39,8 +39,15 @@ def llm_explain(request, pk):
             'duplicate_row_count': int(df.duplicated().sum()),
         }
 
-        prompt = build_statistics_prompt(summary_data, stats)
-        explanation = call_groq(prompt)
+        # Compute correlation alongside statistics — silently skip if not enough numeric columns
+        corr_data = None
+        try:
+            corr_data = compute_correlation_matrix(df, method='pearson')
+        except Exception:
+            pass
+
+        prompt = build_statistics_prompt(summary_data, stats, corr_data=corr_data)
+        explanation = call_llm(prompt)
 
         return Response({'explanation': explanation})
     except LLMError as e:

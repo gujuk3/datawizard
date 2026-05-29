@@ -15,6 +15,9 @@ from datawizard_core.data_loader import (
     validate_csv_structure,
 )
 from datawizard_core.exceptions import InvalidFileError, ValidationError
+from datawizard_core.data_analyzer import generate_dataset_summary
+from datawizard_core.llm_prompter import build_upload_insights_prompt, call_llm
+import numpy as np
 
 
 @api_view(['POST'])
@@ -67,9 +70,22 @@ def upload_dataset(request):
                 unique_count=int(df[col].nunique()),
             )
 
+        # LLM initial insights — non-blocking: upload succeeds even if LLM fails
+        initial_insights = None
+        try:
+            file_size_bytes = int(size_check['file_size_mb'] * 1024 * 1024)
+            summary = generate_dataset_summary(df, file_name=file.name, file_size_bytes=file_size_bytes)
+            numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+            categorical_cols = df.select_dtypes(exclude=[np.number]).columns.tolist()
+            prompt = build_upload_insights_prompt(summary, numeric_cols, categorical_cols)
+            initial_insights = call_llm(prompt)
+        except Exception:
+            pass
+
         return Response({
             'dataset': DatasetSerializer(dataset).data,
             'validation': validation,
+            'initial_insights': initial_insights,
         }, status=status.HTTP_201_CREATED)
 
     except (InvalidFileError, ValidationError) as e:
