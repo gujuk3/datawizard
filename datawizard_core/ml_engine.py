@@ -1,6 +1,9 @@
 import time
+import uuid
+import joblib
 import numpy as np
 import pandas as pd
+from pathlib import Path
 
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression, LinearRegression
@@ -313,6 +316,20 @@ def compute_shap_values(model, X_test, feature_names: list, model_type: str) -> 
 
     except Exception:
         return []
+
+
+def save_model(model, media_root: str) -> str:
+    """Serialize a fitted sklearn model to disk. Returns relative path from MEDIA_ROOT."""
+    rel_path = f"ml_models/{uuid.uuid4().hex}.pkl"
+    abs_path = Path(media_root) / rel_path
+    abs_path.parent.mkdir(parents=True, exist_ok=True)
+    joblib.dump(model, abs_path)
+    return rel_path
+
+
+def load_model(model_file_path: str):
+    """Deserialize a model from an absolute path (e.g. model_file.path from FileField)."""
+    return joblib.load(model_file_path)
 
 
 def run_training_pipeline(df: pd.DataFrame, config: dict) -> dict:

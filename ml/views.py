@@ -16,9 +16,12 @@ from datawizard_core.ml_engine import (
     evaluate_regression_model,
     get_feature_importance,
     compute_shap_values,
+    save_model,
+    load_model,
 )
 from datawizard_core.exceptions import ValidationError, TrainingError
 from datawizard_core.llm_prompter import build_model_results_prompt, call_llm
+from django.conf import settings
 
 
 @api_view(['POST'])
@@ -89,6 +92,9 @@ def train(request):
                 split['y_test'],
             )
 
+        # Serialize trained model to disk
+        rel_path = save_model(result['model'], settings.MEDIA_ROOT)
+
         # Modeli kaydet
         ml_model = MLModel.objects.create(
             user=request.user,
@@ -102,6 +108,7 @@ def train(request):
             train_test_split=test_size,
             training_status='completed',
             training_duration=result.get('training_duration_seconds', 0),
+            model_file=rel_path,
         )
 
         # Metrikleri kaydet
@@ -173,15 +180,14 @@ def predict(request, pk):
     if not features:
         return Response({'error': 'No features provided.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    try:
-        dataset = ml_model.dataset
-        df = load_csv(dataset.file.path)
-        split = split_data(df, ml_model.target_column, ml_model.feature_columns)
-        retrain = train_model(
-            split['X_train'], split['y_train'],
-            ml_model.algorithm, ml_model.model_type
+    if not ml_model.model_file:
+        return Response(
+            {'error': 'No serialized model found. Please retrain this model.'},
+            status=status.HTTP_400_BAD_REQUEST,
         )
-        model = retrain['model']
+
+    try:
+        model = load_model(ml_model.model_file.path)
 
         import pandas as pd
         input_df = pd.DataFrame([features])

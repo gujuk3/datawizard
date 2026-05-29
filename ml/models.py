@@ -15,6 +15,7 @@ class MLModel(models.Model):
     train_test_split = models.FloatField(default=0.2)
     training_status = models.CharField(max_length=50, default='pending')
     training_duration = models.FloatField(null=True, blank=True)
+    model_file = models.FileField(upload_to='ml_models/', null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
