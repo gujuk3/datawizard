@@ -54,22 +54,24 @@ export default function Dashboard() {
         {datasets.length === 0 ? (
           <p style={styles.empty}>Henüz veri seti yüklemediniz.</p>
         ) : (
-          <table style={tStyles.table}>
-            <thead><tr>
-              {['Ad', 'Satır', 'Sütun', 'Durum', 'Tarih'].map(h => <th key={h} style={tStyles.th}>{h}</th>)}
-            </tr></thead>
-            <tbody>
-              {datasets.slice(0, 5).map(ds => (
-                <tr key={ds.id} style={styles.tableRow} onClick={() => navigate(`/datasets/${ds.id}`)}>
-                  <td style={tStyles.td}>{ds.name}</td>
-                  <td style={tStyles.td}>{ds.row_count}</td>
-                  <td style={tStyles.td}>{ds.column_count}</td>
-                  <td style={tStyles.td}><span style={styles.badge}>{ds.status}</span></td>
-                  <td style={tStyles.td}>{new Date(ds.uploaded_at).toLocaleDateString('tr-TR')}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div style={tStyles.scroll}>
+            <table style={tStyles.table}>
+              <thead><tr>
+                {['Ad', 'Satır', 'Sütun', 'Durum', 'Tarih'].map(h => <th key={h} style={tStyles.th}>{h}</th>)}
+              </tr></thead>
+              <tbody>
+                {datasets.slice(0, 5).map(ds => (
+                  <tr key={ds.id} style={styles.tableRow} onClick={() => navigate(`/datasets/${ds.id}`)}>
+                    <td style={tStyles.td}>{ds.name}</td>
+                    <td style={tStyles.tdNum}>{ds.row_count}</td>
+                    <td style={tStyles.tdNum}>{ds.column_count}</td>
+                    <td style={tStyles.td}><span style={styles.badge}>{ds.status}</span></td>
+                    <td style={tStyles.tdNum}>{new Date(ds.uploaded_at).toLocaleDateString('tr-TR')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
@@ -79,22 +81,24 @@ export default function Dashboard() {
         {models.length === 0 ? (
           <p style={styles.empty}>Henüz model eğitmediniz.</p>
         ) : (
-          <table style={tStyles.table}>
-            <thead><tr>
-              {['Ad', 'Algoritma', 'Tip', 'Durum', 'Tarih'].map(h => <th key={h} style={tStyles.th}>{h}</th>)}
-            </tr></thead>
-            <tbody>
-              {models.slice(0, 5).map(m => (
-                <tr key={m.id}>
-                  <td style={tStyles.td}>{m.name}</td>
-                  <td style={tStyles.td}>{m.algorithm}</td>
-                  <td style={tStyles.td}>{m.model_type}</td>
-                  <td style={tStyles.td}><span style={styles.badge}>{m.training_status}</span></td>
-                  <td style={tStyles.td}>{new Date(m.created_at).toLocaleDateString('tr-TR')}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div style={tStyles.scroll}>
+            <table style={tStyles.table}>
+              <thead><tr>
+                {['Ad', 'Algoritma', 'Tip', 'Durum', 'Tarih'].map(h => <th key={h} style={tStyles.th}>{h}</th>)}
+              </tr></thead>
+              <tbody>
+                {models.slice(0, 5).map(m => (
+                  <tr key={m.id}>
+                    <td style={tStyles.td}>{m.name}</td>
+                    <td style={tStyles.td}>{m.algorithm}</td>
+                    <td style={tStyles.tdNum}>{m.model_type}</td>
+                    <td style={tStyles.td}><span style={styles.badge}>{m.training_status}</span></td>
+                    <td style={tStyles.tdNum}>{new Date(m.created_at).toLocaleDateString('tr-TR')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>
@@ -102,9 +106,11 @@ export default function Dashboard() {
 }
 
 const tStyles = {
-  table: { width: '100%', borderCollapse: 'collapse', fontSize: '14px' },
-  th: { padding: '10px 14px', background: '#f8f9fa', borderBottom: '2px solid #dee2e6', textAlign: 'left', fontWeight: '600', fontSize: '13px' },
-  td: { padding: '10px 14px', borderBottom: '1px solid #f0f2f5' },
+  scroll: { overflowX: 'auto', WebkitOverflowScrolling: 'touch' },
+  table: { width: '100%', borderCollapse: 'collapse', fontSize: '13px', minWidth: '420px' },
+  th: { padding: '10px 12px', background: '#f8f9fa', borderBottom: '2px solid #dee2e6', textAlign: 'left', fontWeight: '600', fontSize: '12px', whiteSpace: 'nowrap' },
+  td: { padding: '10px 12px', borderBottom: '1px solid #f0f2f5', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  tdNum: { padding: '10px 12px', borderBottom: '1px solid #f0f2f5', whiteSpace: 'nowrap' },
 };
 
 const styles = {
