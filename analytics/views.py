@@ -4,7 +4,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from datasets.models import Dataset
+from datasets.models import Dataset, DataColumn
 from datawizard_core.data_loader import load_csv
 from datawizard_core.data_analyzer import (
     compute_basic_statistics,
@@ -125,7 +125,28 @@ def preprocess(request, pk):
 
     try:
         df = _load_df(dataset)
+
+        if not df.isnull().values.any():
+            return Response(
+                {'error': 'Bu veri setinde eksik değer bulunmuyor. Herhangi bir işlem yapılmadı.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         df_processed, report = handle_missing_values(df, strategy=strategy, columns=columns)
+
+        # Persist processed CSV back to the same file
+        df_processed.to_csv(dataset.file.path, index=False)
+
+        # Update dataset row count (may change if strategy='drop')
+        dataset.row_count = len(df_processed)
+        dataset.save(update_fields=['row_count'])
+
+        # Update DataColumn missing counts
+        for col in df_processed.columns:
+            DataColumn.objects.filter(dataset=dataset, name=col).update(
+                missing_count=int(df_processed[col].isna().sum())
+            )
+
         return Response({'dataset_id': pk, 'report': report})
     except (ValidationError, PreprocessingError) as e:
         return Response({'error': e.message}, status=status.HTTP_400_BAD_REQUEST)

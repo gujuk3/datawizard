@@ -4,6 +4,8 @@ import API from '../api';
 
 export default function Layout() {
   const [user, setUser] = useState(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -12,6 +14,12 @@ export default function Layout() {
       navigate('/login');
     });
   }, [navigate]);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const logout = () => {
     localStorage.clear();
@@ -26,11 +34,34 @@ export default function Layout() {
     { path: '/datasets', icon: '🗄️', label: 'Veri Setlerim' },
   ];
 
+  const sidebarStyle = isMobile
+    ? {
+        ...styles.sidebar,
+        position: 'fixed',
+        left: 0,
+        top: 0,
+        height: '100vh',
+        zIndex: 1000,
+        transform: sidebarOpen ? 'translateX(0)' : 'translateX(-100%)',
+        transition: 'transform 0.3s ease',
+      }
+    : styles.sidebar;
+
   return (
     <div style={styles.wrapper}>
+      {/* Mobile overlay */}
+      {isMobile && sidebarOpen && (
+        <div style={styles.overlay} onClick={() => setSidebarOpen(false)} />
+      )}
+
       {/* Sidebar */}
-      <div style={styles.sidebar}>
-        <div style={styles.logo}>🧙 DataWizard</div>
+      <div style={sidebarStyle}>
+        <div style={styles.logo}>
+          <span>🧙 DataWizard</span>
+          {isMobile && (
+            <button style={styles.closeBtn} onClick={() => setSidebarOpen(false)}>✕</button>
+          )}
+        </div>
         <nav style={styles.nav}>
           {navItems.map(item => (
             <NavLink
@@ -40,6 +71,7 @@ export default function Layout() {
                 ...styles.navItem,
                 ...(isActive ? styles.navItemActive : {}),
               })}
+              onClick={() => isMobile && setSidebarOpen(false)}
             >
               <span style={styles.navIcon}>{item.icon}</span>
               {item.label}
@@ -53,7 +85,13 @@ export default function Layout() {
       </div>
 
       {/* Main Content */}
-      <div style={styles.main}>
+      <div style={{ ...styles.main, padding: isMobile ? '16px' : '32px' }}>
+        {isMobile && (
+          <div style={styles.mobileHeader}>
+            <button style={styles.hamburger} onClick={() => setSidebarOpen(true)}>☰</button>
+            <span style={styles.mobileTitle}>🧙 DataWizard</span>
+          </div>
+        )}
         <Outlet />
       </div>
     </div>
@@ -69,6 +107,7 @@ const styles = {
   logo: {
     padding: '24px 20px', fontSize: '20px', fontWeight: 'bold',
     color: '#a29bfe', borderBottom: '1px solid #3d4146',
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
   },
   nav: { flex: 1, padding: '16px 0' },
   navItem: {
@@ -90,5 +129,24 @@ const styles = {
     border: '1px solid #636e72', color: '#b2bec3', borderRadius: '6px',
     cursor: 'pointer', fontSize: '13px',
   },
-  main: { flex: 1, padding: '32px', overflow: 'auto' },
+  main: { flex: 1, overflow: 'auto' },
+  mobileHeader: {
+    display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px',
+  },
+  hamburger: {
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    width: '40px', height: '40px', background: '#2d3436', color: 'white',
+    border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '20px',
+    flexShrink: 0,
+  },
+  mobileTitle: {
+    fontSize: '18px', fontWeight: 'bold', color: '#2d3436',
+  },
+  overlay: {
+    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 999,
+  },
+  closeBtn: {
+    background: 'transparent', border: 'none', color: '#a29bfe',
+    fontSize: '20px', cursor: 'pointer', padding: '4px', lineHeight: 1,
+  },
 };
