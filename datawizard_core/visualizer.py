@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 DEFAULT_OUTPUT_DIR = "plots"
-DEFAULT_DPI = 150
+DEFAULT_DPI = 800
 DEFAULT_FIGSIZE = (10, 6)
 
 # DataWizard color palette

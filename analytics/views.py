@@ -1,3 +1,8 @@
+import base64
+import os
+import tempfile
+
+import pandas as pd
 from django.shortcuts import render
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
@@ -15,6 +20,26 @@ from datawizard_core.data_preprocessor import handle_missing_values
 from datawizard_core.exceptions import ValidationError, PreprocessingError
 from datawizard_core.llm_prompter import build_statistics_prompt, call_llm
 from datawizard_core.exceptions import LLMError
+from datawizard_core.visualizer import (
+    plot_histogram,
+    plot_bar_chart,
+    plot_box,
+    plot_scatter,
+    plot_correlation_heatmap,
+)
+
+
+def _chart_to_base64(plot_func, *args, **kwargs) -> str:
+    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
+        tmp_path = tmp.name
+    try:
+        plot_func(*args, output_path=tmp_path, **kwargs)
+        with open(tmp_path, 'rb') as f:
+            b64 = base64.b64encode(f.read()).decode()
+        return f"data:image/png;base64,{b64}"
+    finally:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -149,6 +174,64 @@ def preprocess(request, pk):
 
         return Response({'dataset_id': pk, 'report': report})
     except (ValidationError, PreprocessingError) as e:
+        return Response({'error': e.message}, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def chart(request, pk):
+    dataset = _get_dataset_or_404(pk, request.user)
+    if not dataset:
+        return Response({'error': 'Dataset not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    chart_type = request.query_params.get('type', '')
+    if not chart_type:
+        return Response({'error': "'type' query param required."}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        df = _load_df(dataset)
+
+        if chart_type == 'histogram':
+            column = request.query_params.get('column', '')
+            if not column or column not in df.columns:
+                return Response({'error': f"Column '{column}' not found."}, status=status.HTTP_400_BAD_REQUEST)
+            if not pd.api.types.is_numeric_dtype(df[column]):
+                return Response({'error': f"Column '{column}' is not numeric."}, status=status.HTTP_400_BAD_REQUEST)
+            data = _chart_to_base64(plot_histogram, df, column)
+
+        elif chart_type == 'bar':
+            column = request.query_params.get('column', '')
+            if not column or column not in df.columns:
+                return Response({'error': f"Column '{column}' not found."}, status=status.HTTP_400_BAD_REQUEST)
+            data = _chart_to_base64(plot_bar_chart, df, column)
+
+        elif chart_type == 'box':
+            numeric_cols = df.select_dtypes(include='number').columns.tolist()
+            if not numeric_cols:
+                return Response({'error': 'No numeric columns.'}, status=status.HTTP_400_BAD_REQUEST)
+            data = _chart_to_base64(plot_box, df, numeric_cols)
+
+        elif chart_type == 'scatter':
+            x_col = request.query_params.get('x', '')
+            y_col = request.query_params.get('y', '')
+            hue_col = request.query_params.get('hue', '') or None
+            if not x_col or x_col not in df.columns or not y_col or y_col not in df.columns:
+                return Response({'error': 'Invalid x or y column.'}, status=status.HTTP_400_BAD_REQUEST)
+            data = _chart_to_base64(plot_scatter, df, x_col, y_col, hue_column=hue_col)
+
+        elif chart_type == 'correlation':
+            method = request.query_params.get('method', 'pearson')
+            corr_data = compute_correlation_matrix(df, method=method)
+            data = _chart_to_base64(plot_correlation_heatmap, corr_data)
+
+        else:
+            return Response({'error': f"Unknown chart type '{chart_type}'."}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({'chart': data})
+
+    except ValidationError as e:
         return Response({'error': e.message}, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

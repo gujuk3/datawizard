@@ -1,3 +1,7 @@
+import base64
+import os
+import tempfile
+
 from django.shortcuts import render
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
@@ -21,7 +25,25 @@ from datawizard_core.ml_engine import (
 )
 from datawizard_core.exceptions import ValidationError, TrainingError
 from datawizard_core.llm_prompter import build_model_results_prompt, call_llm
+from datawizard_core.visualizer import (
+    plot_feature_importance,
+    plot_confusion_matrix,
+    plot_prediction_vs_actual,
+)
 from django.conf import settings
+
+
+def _chart_to_base64(plot_func, *args, **kwargs) -> str:
+    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
+        tmp_path = tmp.name
+    try:
+        plot_func(*args, output_path=tmp_path, **kwargs)
+        with open(tmp_path, 'rb') as f:
+            b64 = base64.b64encode(f.read()).decode()
+        return f"data:image/png;base64,{b64}"
+    finally:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
 
 
 @api_view(['POST'])
@@ -210,3 +232,54 @@ def delete_model(request, pk):
         return Response({'message': 'Model deleted.'}, status=status.HTTP_204_NO_CONTENT)
     except MLModel.DoesNotExist:
         return Response({'error': 'Model not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def chart(request, pk):
+    try:
+        ml_model = MLModel.objects.get(pk=pk, user=request.user)
+    except MLModel.DoesNotExist:
+        return Response({'error': 'Model not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    chart_type = request.query_params.get('type', '')
+    if not chart_type:
+        return Response({'error': "'type' query param required."}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        if chart_type == 'feature_importance':
+            if not ml_model.model_file:
+                return Response({'error': 'No model file. Please retrain.'}, status=status.HTTP_400_BAD_REQUEST)
+            model = load_model(ml_model.model_file.path)
+            fi = get_feature_importance(model, ml_model.feature_columns)
+            if not fi:
+                return Response({'error': 'Feature importance not available for this model type.'}, status=status.HTTP_400_BAD_REQUEST)
+            data = _chart_to_base64(plot_feature_importance, fi)
+
+        elif chart_type == 'confusion_matrix':
+            if ml_model.model_type != 'classification':
+                return Response({'error': 'Confusion matrix is only for classification models.'}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                cm_metric = ml_model.metrics.get(metric_name='confusion_matrix')
+                labels_metric = ml_model.metrics.get(metric_name='class_labels')
+            except ModelMetric.DoesNotExist:
+                return Response({'error': 'Confusion matrix data not found. Please retrain.'}, status=status.HTTP_400_BAD_REQUEST)
+            data = _chart_to_base64(plot_confusion_matrix, cm_metric.additional_data, labels_metric.additional_data)
+
+        elif chart_type == 'prediction_vs_actual':
+            if ml_model.model_type != 'regression':
+                return Response({'error': 'Prediction vs Actual is only for regression models.'}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                pred_metric = ml_model.metrics.get(metric_name='predictions')
+                actual_metric = ml_model.metrics.get(metric_name='actuals')
+            except ModelMetric.DoesNotExist:
+                return Response({'error': 'Prediction data not found. Please retrain.'}, status=status.HTTP_400_BAD_REQUEST)
+            data = _chart_to_base64(plot_prediction_vs_actual, pred_metric.additional_data, actual_metric.additional_data)
+
+        else:
+            return Response({'error': f"Unknown chart type '{chart_type}'."}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({'chart': data})
+
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

@@ -7,4 +7,5 @@ urlpatterns = [
     path('<int:pk>/', views.model_detail, name='model_detail'),
     path('<int:pk>/predict/', views.predict, name='predict'),
     path('<int:pk>/delete/', views.delete_model, name='delete_model'),
+    path('<int:pk>/chart/', views.chart, name='ml_chart'),
 ]

@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import API from '../api';
 import MarkdownText from '../components/MarkdownText';
+import ChartImage from '../components/ChartImage';
 
 const ALGORITHMS = [
   { value: 'random_forest_classifier', label: 'Random Forest Classifier', type: 'classification' },
@@ -28,6 +29,10 @@ export default function ModelTraining() {
   const [selectedModel, setSelectedModel] = useState(null);
   const [selectedFeatureCols, setSelectedFeatureCols] = useState([]);
   const [modelName, setModelName] = useState('');
+  const [fiChart, setFiChart] = useState(null);
+  const [fiChartLoading, setFiChartLoading] = useState(false);
+  const [evalChart, setEvalChart] = useState(null);
+  const [evalChartLoading, setEvalChartLoading] = useState(false);
 
   useEffect(() => {
   API.get('/datasets/').then(r => setDatasets(r.data));
@@ -73,6 +78,22 @@ export default function ModelTraining() {
     m => m.name.toLowerCase() === modelName.trim().toLowerCase()
   );
 
+  const loadCharts = useCallback((modelId, modelType) => {
+    setFiChart(null); setEvalChart(null);
+    setFiChartLoading(true); setEvalChartLoading(true);
+
+    API.get(`/ml/${modelId}/chart/?type=feature_importance`)
+      .then(r => setFiChart(r.data.chart))
+      .catch(() => {})
+      .finally(() => setFiChartLoading(false));
+
+    const evalType = modelType === 'classification' ? 'confusion_matrix' : 'prediction_vs_actual';
+    API.get(`/ml/${modelId}/chart/?type=${evalType}`)
+      .then(r => setEvalChart(r.data.chart))
+      .catch(() => {})
+      .finally(() => setEvalChartLoading(false));
+  }, []);
+
   const handleTrain = async () => {
     if (!modelName.trim()) { setError('Model ismi boş bırakılamaz.'); return; }
     if (isDuplicateName) { setError(`"${modelName.trim()}" isimli bir model zaten mevcut.`); return; }
@@ -81,6 +102,7 @@ export default function ModelTraining() {
     setError('');
     setResult(null);
     setPredResult(null);
+    setFiChart(null); setEvalChart(null);
 
     try {
       const res = await API.post('/ml/train/', {
@@ -98,6 +120,7 @@ export default function ModelTraining() {
       const initInputs = {};
       selectedFeatureCols.forEach(f => initInputs[f] = '');
       setPredInputs(initInputs);
+      loadCharts(res.data.model.id, res.data.model.model_type);
     } catch (e) {
       setError(e.response?.data?.error || 'Eğitim başarısız.');
     }
@@ -281,6 +304,23 @@ export default function ModelTraining() {
             </div>
           )}
 
+          {/* Grafikler */}
+          <div style={styles.chartsSection}>
+            <h4 style={{ margin: '0 0 12px', color: '#2d3436' }}>📊 Model Grafikleri</h4>
+            <div style={styles.chartsGrid}>
+              <div>
+                <p style={styles.chartLabel}>Özellik Önemi</p>
+                <ChartImage src={fiChart} loading={fiChartLoading} height={300} />
+              </div>
+              <div>
+                <p style={styles.chartLabel}>
+                  {result.model.model_type === 'classification' ? 'Confusion Matrix' : 'Tahmin vs Gerçek'}
+                </p>
+                <ChartImage src={evalChart} loading={evalChartLoading} height={300} />
+              </div>
+            </div>
+          </div>
+
           {/* AI Açıklama */}
           {result.llm_explanation && (
             <div style={styles.explainBox}>
@@ -433,4 +473,7 @@ const styles = {
   shapTitle: { margin: '0 0 4px', color: '#2d3436' },
   shapDesc: { fontSize: '12px', color: '#636e72', marginBottom: '12px' },
   shapBar: { height: '10px', background: '#00b894', borderRadius: '4px', transition: 'width 0.4s' },
+  chartsSection: { marginBottom: '20px', paddingTop: '4px' },
+  chartsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' },
+  chartLabel: { fontSize: '13px', fontWeight: '600', color: '#636e72', margin: '0 0 4px' },
 };

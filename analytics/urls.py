@@ -7,4 +7,5 @@ urlpatterns = [
     path('<int:pk>/missing/', views.missing_values, name='missing_values'),
     path('<int:pk>/preprocess/', views.preprocess, name='preprocess'),
     path('<int:pk>/explain/', views.llm_explain, name='llm_explain'),
+    path('<int:pk>/chart/', views.chart, name='analytics_chart'),
 ]
